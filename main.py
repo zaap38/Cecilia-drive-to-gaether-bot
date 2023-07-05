@@ -67,6 +67,9 @@ class Node:
         self.typeNode = typeNode
         self.indexTypeNode = indexTypeNode
         self.edgeOpen = set(edgeOpen)
+
+        self.pathLength = -1
+        self.closestAgent = None
     
     def __str__(self):
         if self.edgeOpen == {Edge.UP, Edge.DOWN}:
@@ -148,7 +151,7 @@ class Environment:
 
     def getLinks(self, x, y):
         links = []
-        for possibleOrientation in self.nodeGrid[x][y]:
+        for possibleOrientation in self.nodeGrid[x][y].edgeOpen:
             links += [(Orientation.nextCoords(x, y, possibleOrientation))]
         return links
 
@@ -170,24 +173,30 @@ class Environment:
 
     def isInf(self, a, b, f):
         return f(a) <= f(b)
+    
+    def distPathLength(self, a):
+        return a.pathLength
 
     def getPriority(self, q):
         index = None
         for i, e in enumerate(q):
-            if index is None or self.isInf(e, q[index]):
+            if index is None or self.isInf(e, q[index], self.distPathLength):
                 index = i
         if index is None:
             return None
         e = q.pop(index)
-        return e, q
+        return e
 
-    def processElement(self, e, queue, nodes):
+    def processElement(self, e, queue, nodes, coordToIndex):
         # update the color and add neighbours to queue
         e.color = 2
-        neighbours = self.getNeighboursByCoord(e)
+        neighbours = self.getLinks(e.coord[0], e.coord[1])
         for n in neighbours:
-            if True:
-                queue.append(n)
+            if nodes[coordToIndex[n]].color == 0:
+                nodes[coordToIndex[n]].color = 1
+                nodes[coordToIndex[n]].pathLength = e.pathLength + 1
+                nodes[coordToIndex[n]].agent = e.agent
+                queue.append(nodes[coordToIndex[n]])
 
 
     def voronoi(self):
@@ -195,18 +204,31 @@ class Environment:
         current = None
         queue = []
         nodes = []
+        coordToIndex = dict()
+        index = 0
         for y in range(self.h):
             for x in range(self.w):
                 agent = self.agentAt(x, y)
+                node = PathNode(x, y)
                 if agent is not None:
-                    queue.append(PathNode(x, y, agent.id, 1))
-                else:
-                    nodes.append(PathNode(x, y))
+                    node.agent = agent
+                    node.color = 1
+                    queue.append(node)
+                nodes.append(node)
+                coordToIndex[node.coord] = index
+                index += 1
 
-        current, queue = self.getPriority(queue)
+
+        current = self.getPriority(queue)
         while current is not None:
-            self.processElement(current)
-            current, queue = self.getPriority(queue)
+            self.processElement(current, queue, nodes, coordToIndex)
+            current = self.getPriority(queue)
+
+        for y in range(self.h):  # update nodes pathLength
+            for x in range(self.w):
+                self.nodeGrid[x][y].pathLength = nodes[coordToIndex[(x, y)]].pathLength
+                self.nodeGrid[x][y].closestAgent = nodes[coordToIndex[(x, y)]].agent
+
 
 
 class PathNode:
@@ -215,6 +237,7 @@ class PathNode:
         self.coord = (x, y)
         self.agent = agent
         self.color = color
+        self.pathLength = 0
 
 
 
@@ -229,10 +252,12 @@ environment.nodeGrid[0][2] = Node(TypeNode.NONE, 1, {Edge.RIGHT, Edge.UP})
 environment.nodeGrid[1][2] = Node(TypeNode.NONE, 1, {Edge.RIGHT, Edge.LEFT})
 environment.nodeGrid[2][2] = Node(TypeNode.NONE, 1, {Edge.UP, Edge.LEFT})
 environment.addAgent(0, 1, Orientation.DOWN)
+environment.addAgent(1, 2, Orientation.DOWN)
 
 print(environment)
 for _ in range(300):
     environment()
+    environment.voronoi()
     os.system('clear')
     print(environment)
     time.sleep(0.1)
