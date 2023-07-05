@@ -7,7 +7,86 @@ import random
 from enum import IntEnum
 from typing import Any
 import os
+import copy as cp
+import random as rd
 
+
+class RLAgent:
+
+    def __init__(self) -> None:
+        self.q = {}
+        self.epsilon = 1.0  # exploration
+        self.discountEpsilon = 0.995
+        self.gamma = 0.1  # discount factor
+        self.eta = 0.01  # learning rate
+        self.legalActions = []
+
+    def getRandomPolicy(self, state):
+        return rd.choice(self.getLegalActions(state))
+    
+    def getBestPolicy(self, state):
+        bestAction = 0
+        actions = self.getLegalActions(state)
+        for a in actions:
+            if self.q[state, a] > self.q[state, bestAction]:
+                bestAction = a
+        return bestAction
+    
+    def getBestPolicyReward(self, state):
+        bestAction = 0
+        actions = self.getLegalActions(state)
+        for a in actions:
+            value = 0
+            skip = False
+            if (state, a) in self.q.keys():
+                value = self.q[state, a]
+            if (state, bestAction) not in self.q.keys():
+                skip = True
+            if skip or (value) > self.q[state, bestAction]:
+                bestAction = a
+        return self.q[state, bestAction]
+    
+    def updateQValues(self, old_state, actionDone, state, reward):
+        # print(self.q)
+        if (old_state, actionDone) not in self.q.keys():
+            self.q[old_state, actionDone] = 0
+        old_reward = self.q[old_state, actionDone]
+        self.q[old_state, actionDone] += self.eta * (reward + \
+                (self.getBestPolicyReward(state) - self.q[old_state, actionDone]) * self.gamma)
+        if abs(old_reward - self.q[old_state, actionDone]) <= 0.05:
+            self.epsilon = self.epsilon * self.discountEpsilon
+
+    def getLegalActions(self, state):
+        return self.legalActions
+
+    def selectAction(self, state):
+        if rd.random() < self.epsilon:  # explore
+            action = self.getRandomPolicy(state)
+        else:  # best policy
+            action = self.getBestPolicy(state)
+        return action
+
+class TestEnv:
+
+    def __init__(self) -> None:
+        self.agent = RLAgent()
+
+    def getReward(self, state, action):
+        return 1 if action == state else 0
+    
+    def getLegalActions(self, state):
+        return [0, 1]
+    
+    def getState(self):
+        return rd.randint(0, 1)
+    
+    def runStep(self):
+        state = self.getState()  # S
+        self.agent.legalActions = self.getLegalActions(state)  # give legal actions to the agent given the state
+        action = self.agent.selectAction(state)  # action
+        # print(state, action)
+        state = self.getState()  # S+1
+        self.agent.updateQValues(state, action, self.getState(), self.getReward(state, action))
 
 
 class TypeNode(IntEnum):
@@ -69,8 +148,7 @@ class Node:
         self.indexTypeNode = indexTypeNode
         self.edgeOpen = set(edgeOpen)
 
-        self.pathLength = -1
-        self.closestAgent = None
+        self.pathLength = []
     
     def __str__(self):
         result = Back.BLACK
@@ -187,6 +265,17 @@ class Environment:
         agent.id = len(self.agentList)
         self.agentList += [agent]
 
+    def simulate(self, action):
+        pass
+
+    def getNeihbourStates(self):
+        actions = []
+        for agent in self.agentList:
+            actions.append(self.getPossibleMoves(agent))
+        states = []
+        for a in actions:
+            pass
+
     def isInf(self, a, b, f):
         return f(a) <= f(b)
     
@@ -211,11 +300,12 @@ class Environment:
             if nodes[coordToIndex[n]].color == 0:
                 nodes[coordToIndex[n]].color = 1
                 nodes[coordToIndex[n]].pathLength = e.pathLength + 1
-                nodes[coordToIndex[n]].agent = e.agent
+                nodes[coordToIndex[n]].orientation = e.orientation
+                nodes[coordToIndex[n]].state = self.simulate()
                 queue.append(nodes[coordToIndex[n]])
 
 
-    def voronoi(self):
+    def dijkstra(self):
         # map each cel of the grid to the closest agent
         current = None
         queue = []
@@ -243,17 +333,17 @@ class Environment:
         for y in range(self.h):  # update nodes pathLength
             for x in range(self.w):
                 self.nodeGrid[x][y].pathLength = nodes[coordToIndex[(x, y)]].pathLength
-                self.nodeGrid[x][y].closestAgent = nodes[coordToIndex[(x, y)]].agent
 
 
 
 class PathNode:
 
-    def __init__(self, x, y, agent=-1, color=0) -> None:
+    def __init__(self, x, y, orientation=-1, color=0) -> None:
         self.coord = (x, y)
-        self.agent = agent
+        self.orientation = orientation
         self.color = color
         self.pathLength = 0
+        self.state = None
 
 
 
@@ -292,9 +382,11 @@ environment.addAgent(0, 1, Orientation.DOWN)
 environment.addAgent(1, 2, Orientation.DOWN)
 
 print(environment)
+env = TestEnv()
 for _ in range(300):
-    environment()
-    environment.voronoi()
-    os.system('clear')
-    print(environment)
+    #environment()
+    # environment.voronoi()
+    # os.system('clear')
+    #print(environment)
+    env.runStep()
     time.sleep(0.1)
