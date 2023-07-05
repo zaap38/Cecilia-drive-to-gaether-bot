@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from colorama import Fore, Back, Style
 import time
 import random
 from enum import IntEnum
@@ -69,31 +70,42 @@ class Node:
         self.edgeOpen = set(edgeOpen)
     
     def __str__(self):
+        result = Back.BLACK
+
+        if self.typeNode == TypeNode.HOSPITAL:
+            result = Back.BLUE
+        if self.typeNode == TypeNode.START:
+            result = Back.GREEN
+        if self.typeNode == TypeNode.VICTIM:
+            result = Back.RED
+
         if self.edgeOpen == {Edge.UP, Edge.DOWN}:
-            return '┃'
+            result += '┃'
         elif self.edgeOpen == {Edge.LEFT, Edge.RIGHT}:
-            return '━'
+            result += '━'
 
         elif self.edgeOpen == {Edge.RIGHT, Edge.DOWN}:
-            return '┏'
+            result += '┏'
         elif self.edgeOpen == {Edge.LEFT, Edge.DOWN}:
-            return '┓'
+            result += '┓'
         elif self.edgeOpen == {Edge.UP, Edge.RIGHT}:
-            return '┗'
+            result += '┗'
         elif self.edgeOpen == {Edge.UP, Edge.LEFT}:
-            return '┛'
+            result += '┛'
 
         elif self.edgeOpen == {Edge.UP, Edge.DOWN, Edge.RIGHT}:
-            return '┣'
+            result += '┣'
         elif self.edgeOpen == {Edge.UP, Edge.DOWN, Edge.LEFT}:
-            return '┫'
+            result += '┫'
         elif self.edgeOpen == {Edge.RIGHT, Edge.LEFT, Edge.UP}:
-            return '┻'
+            result += '┻'
         elif self.edgeOpen == {Edge.RIGHT, Edge.LEFT, Edge.DOWN}:
-            return '┳'
+            result += '┳'
         
         else:
-            return '•'
+            result += '•'
+        
+        return result
 
 
 
@@ -104,17 +116,21 @@ class Agent:
         self.orientation = orientation
     
     def __str__(self):
+        result = Back.BLACK
+
         if self.orientation == Orientation.UP:
-            return '▲'
+            result += '▲'
         elif self.orientation == Orientation.RIGHT:
-            return '▶'
+            result += '▶'
         elif self.orientation == Orientation.DOWN:
-            return '▼'
+            result += '▼'
         elif self.orientation == Orientation.LEFT:
-            return '◀'
+            result += '◀'
     
         else:
-            return '•'
+            result += '•'
+
+        return result
 
     def __call__(self):
         return Action(random.randint(0, 2))
@@ -171,16 +187,40 @@ class Environment:
 
 
 
-environment = Environment(4, 5)
-environment.nodeGrid[0][0] = Node(TypeNode.VICTIM, 1, {Edge.RIGHT, Edge.DOWN})
-environment.nodeGrid[1][0] = Node(TypeNode.NONE, 1, {Edge.LEFT, Edge.RIGHT})
-environment.nodeGrid[2][0] = Node(TypeNode.NONE, 1, {Edge.LEFT, Edge.DOWN})
-environment.nodeGrid[0][1] = Node(TypeNode.NONE, 1, {Edge.UP, Edge.DOWN})
-environment.nodeGrid[1][1] = Node(TypeNode.NONE, 1, {})
-environment.nodeGrid[2][1] = Node(TypeNode.NONE, 1, {Edge.UP, Edge.DOWN})
-environment.nodeGrid[0][2] = Node(TypeNode.NONE, 1, {Edge.RIGHT, Edge.UP})
-environment.nodeGrid[1][2] = Node(TypeNode.NONE, 1, {Edge.RIGHT, Edge.LEFT})
-environment.nodeGrid[2][2] = Node(TypeNode.NONE, 1, {Edge.UP, Edge.LEFT})
+environment = Environment(5, 5)
+environment.nodeGrid[0][0] = Node(TypeNode.VICTIM, 1, {Edge.DOWN, Edge.RIGHT})
+environment.nodeGrid[1][0] = Node(TypeNode.VICTIM, 2, {Edge.LEFT, Edge.RIGHT})
+environment.nodeGrid[2][0] = Node(TypeNode.START, 1, {Edge.LEFT, Edge.DOWN, Edge.RIGHT})
+environment.nodeGrid[3][0] = Node(TypeNode.VICTIM, 3, {Edge.LEFT, Edge.DOWN})
+environment.nodeGrid[4][0] = Node(TypeNode.NONE, 0, {})
+
+environment.nodeGrid[0][1] = Node(TypeNode.NONE, 0, {Edge.DOWN, Edge.UP})
+environment.nodeGrid[1][1] = Node(TypeNode.NONE, 0, {})
+environment.nodeGrid[2][1] = Node(TypeNode.VICTIM, 4, {Edge.UP, Edge.DOWN, Edge.RIGHT})
+environment.nodeGrid[3][1] = Node(TypeNode.HOSPITAL, 1, {Edge.UP, Edge.DOWN, Edge.LEFT})
+environment.nodeGrid[4][1] = Node(TypeNode.NONE, 0, {})
+
+environment.nodeGrid[0][2] = Node(TypeNode.NONE, 0, {Edge.UP, Edge.DOWN, Edge.RIGHT})
+environment.nodeGrid[1][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT})
+environment.nodeGrid[2][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT, Edge.UP})
+environment.nodeGrid[3][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT, Edge.UP})
+environment.nodeGrid[4][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.DOWN})
+
+environment.nodeGrid[0][3] = Node(TypeNode.NONE, 0, {Edge.UP, Edge.DOWN})
+environment.nodeGrid[1][3] = Node(TypeNode.NONE, 0, {})
+environment.nodeGrid[2][3] = Node(TypeNode.HOSPITAL, 2, {Edge.RIGHT, Edge.DOWN})
+environment.nodeGrid[3][3] = Node(TypeNode.START, 2, {Edge.LEFT, Edge.RIGHT, Edge.DOWN})
+environment.nodeGrid[4][3] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.UP})
+
+environment.nodeGrid[0][4] = Node(TypeNode.START, 3, {Edge.UP, Edge.RIGHT})
+environment.nodeGrid[1][4] = Node(TypeNode.VICTIM, 5, {Edge.LEFT, Edge.RIGHT})
+environment.nodeGrid[2][4] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT, Edge.UP})
+environment.nodeGrid[3][4] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.UP})
+environment.nodeGrid[4][4] = Node(TypeNode.NONE, 0, {})
+
+
+
+
 environment.addAgent(0, 1, Orientation.DOWN)
 
 print(environment)
@@ -189,4 +229,3 @@ for _ in range(300):
     os.system('clear')
     print(environment)
     time.sleep(0.1)
-
