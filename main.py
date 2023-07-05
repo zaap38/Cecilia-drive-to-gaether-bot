@@ -265,9 +265,6 @@ environment.nodeGrid[2][4] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT, Edge
 environment.nodeGrid[3][4] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.UP})
 environment.nodeGrid[4][4] = Node(TypeNode.NONE, 0, {})
 
-
-
-
 environment.addAgent(0, 1, Orientation.DOWN)
 
 print(environment)
