@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from enum import Enum
+import time
+import random
+from enum import IntEnum
 from typing import Any
+import os
 
 
 
-class TypeNode(Enum):
+class TypeNode(IntEnum):
     START = 0
     HOSPITAL = 1
     VICTIM = 2
@@ -14,23 +17,48 @@ class TypeNode(Enum):
 
 
 
-class Edge(Enum):
+class Edge(IntEnum):
     UP = 0
     RIGHT = 1
     DOWN = 2
     LEFT = 3
 
+    @staticmethod
+    def nextCoords(x, y, orientation):
+        if orientation == Edge.UP:
+            return x, y - 1
+        if orientation == Edge.RIGHT:
+            return x + 1, y
+        if orientation == Edge.DOWN:
+            return x, y + 1
+        if orientation == Edge.LEFT:
+            return x - 1, y
+
 Orientation = Edge
 
 
 
-class Action(Enum):
+class Action(IntEnum):
     MOVE = 0
     LEFT = 1
     RIGHT = 2
     PICK = 3
     DROP = 4
     NONE = 5
+
+    @staticmethod
+    def orientationFromAction(orientation, action):
+        if action in [Action.PICK, Action.DROP, Action.NONE]:
+            return None
+        
+        if action == Action.MOVE:
+            return orientation
+
+        if action == Action.LEFT:
+            return Orientation((int(orientation) - 1) % 4)
+
+        if action == Action.RIGHT:
+            return Orientation((int(orientation) + 1) % 4)
 
 
 
@@ -70,26 +98,27 @@ class Node:
 
 
 class Agent:
-    def __init__(self, x, y, o):
+    def __init__(self, x, y, orientation):
         self.x = x
         self.y = y
-        self.o = o
+        self.orientation = orientation
     
     def __str__(self):
-        if self.o == Orientation.UP:
+        if self.orientation == Orientation.UP:
             return '▲'
-        elif self.o == Orientation.RIGHT:
+        elif self.orientation == Orientation.RIGHT:
             return '▶'
-        elif self.o == Orientation.DOWN:
+        elif self.orientation == Orientation.DOWN:
             return '▼'
-        elif self.o == Orientation.LEFT:
+        elif self.orientation == Orientation.LEFT:
             return '◀'
     
         else:
             return '•'
 
     def __call__(self):
-        pass
+        return Action(random.randint(0, 2))
+    
 
 
 class Environment:
@@ -109,13 +138,30 @@ class Environment:
         return result
     
     def getPerception(self, agent):
-        pass
+        return {}
 
     def agentAt(self, x, y):
         for a in self.agentList:
             if a.x == x and a.y == y:
                 return a
         return None
+
+    def getLinks(self, x, y):
+        links = []
+        for possibleOrientation in self.nodeGrid[x][y]:
+            links += [(Orientation.nextCoords(x, y, possibleOrientation))]
+        return links
+
+    def processAction(self, agent, agentAction):
+        actionOrientation = Action.orientationFromAction(agent.orientation, agentAction)
+        if actionOrientation in self.nodeGrid[agent.x][agent.y].edgeOpen:
+            agent.x, agent.y = Orientation.nextCoords(agent.x, agent.y, actionOrientation)
+            agent.orientation = actionOrientation
+            
+    def __call__(self):
+        for agent in self.agentList:
+            agentAction = agent()
+            self.processAction(agent, agentAction)
     
     def addAgent(self, x, y, o):
         agent = Agent(x, y, o)
@@ -185,4 +231,9 @@ environment.nodeGrid[2][2] = Node(TypeNode.NONE, 1, {Edge.UP, Edge.LEFT})
 environment.addAgent(0, 1, Orientation.DOWN)
 
 print(environment)
-environment.voronoi()
+for _ in range(300):
+    environment()
+    os.system('clear')
+    print(environment)
+    time.sleep(0.1)
+
