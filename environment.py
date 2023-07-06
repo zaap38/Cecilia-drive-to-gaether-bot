@@ -3,6 +3,8 @@ from typing import List, Tuple
 from enum import IntEnum
 from rlagent import RLAgent
 import copy as cp
+import time
+import os
 
 
 class Action(IntEnum):
@@ -107,7 +109,15 @@ class Cell:
             result += '•'
 
         if self.agentFlag.index != -1:
-            result = str(self.agentFlag.index)
+            #result = str(self.agentFlag.index)
+            if self.agentFlag.orientation == Orientation.UP:
+                result = '▲'
+            elif self.agentFlag.orientation == Orientation.RIGHT:
+                result = '▶'
+            elif self.agentFlag.orientation == Orientation.DOWN:
+                result = '▼'
+            elif self.agentFlag.orientation == Orientation.LEFT:
+                result = '◀'
         
         return result
 
@@ -121,7 +131,6 @@ class Environment:
     def getState(self):
         # hash current state
         hash = str(self)
-        print(hash)
         return hash
 
     def updateState(self, agent, action):
@@ -132,25 +141,25 @@ class Environment:
         # default (time) -> -1
         # TODO: add an action "wait[DIR]" which converts to DIR for the server but returns default reward if NOP
         status = self.doAction(agent.id, action)
-        
+        reward = -10
         if status:
             if action in [Action.LEFT, Action.RIGHT, Action.MOVE]:
-                return -1
+                reward = -1
+                if action == Action.MOVE:  # test
+                    reward = 1
             if action == Action.DROP:
-                return 5  # times victim count
+                reward = 5  # times victim count
             if action == Action.PICK:
-                return 5
+                reward = 5
             if action == Action.NONE:
-                return -1
-        else:
-            return -10
+                reward = -1
+        return reward
 
     def runStep(self, agent):
         state = self.getState()
         agent.legalActions = self.getLegalActions(agent.id)
         action = agent.selectAction(state)
         reward = self.updateState(agent, action)
-        reward = 1  # to remove
         old_state = cp.deepcopy(state)
         state = self.getState()
         agent.updateQValues(old_state, action, state, reward)
@@ -195,6 +204,7 @@ class Environment:
             status = self.doDrop(agentId)
         if action == Action.NONE:
             status = self.doNone(agentId)
+        return status
 
     def doLeft(self, agentId):
         agentCell = self._getCellAgent(agentId)
@@ -299,7 +309,7 @@ environment.setCell(2, 4, openOrientations={Orientation.LEFT, Orientation.RIGHT,
 environment.setCell(3, 4, openOrientations={Orientation.LEFT, Orientation.UP})
 environment.setCell(4, 4, openOrientations={})
 
-print(environment)
+"""print(environment)
 print(environment.getLegalActions(0))
 environment.doAction(0, Action.MOVE)
 print(environment)
@@ -309,8 +319,14 @@ print(environment)
 print(environment.getLegalActions(0))
 environment.doAction(0, Action.MOVE)
 print(environment)
-print(environment.getLegalActions(0))
+print(environment.getLegalActions(0))"""
 
 agent = RLAgent()
-environment.runStep(agent)
+for _ in range(10000):
+    #os.system('cls')
+    print("vvvvvvvvvvvvvvvvvv")
+    print(environment)
+    print(agent.getLegalActionRewards(environment.getState()), agent.epsilon)
+    environment.runStep(agent)
+    time.sleep(0.3)
 

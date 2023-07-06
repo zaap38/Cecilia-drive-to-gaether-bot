@@ -9,36 +9,50 @@ class RLAgent:
         self.epsilon = 1.0  # exploration
         self.discountEpsilon = 0.995
         self.gamma = 0.1  # discount factor
-        self.eta = 0.01  # learning rate
+        self.eta = 0.05  # learning rate
         self.legalActions = []
 
     def getRandomPolicy(self, state):
         return rd.choice(self.getLegalActions(state))
     
+    def getLegalActionRewards(self, state):
+        couples = []
+        actions = self.getLegalActions(state)
+        for a in actions:
+            if (state, a) in self.q.keys():
+                couples.append((a, self.q[state, a]))
+            else:
+                couples.append((a, 0))
+        return str(couples)
+    
     def getBestPolicy(self, state):
         bestAction = 0
         actions = self.getLegalActions(state)
         for a in actions:
-            if self.q[state, a] > self.q[state, bestAction]:
-                bestAction = a
+            if (state, a) in self.q.keys():
+                if (state, bestAction) in self.q.keys():
+                    if self.q[state, a] > self.q[state, bestAction]:
+                        bestAction = a
+                else:
+                    bestAction = a
         return bestAction
     
     def getBestPolicyReward(self, state):
         bestAction = 0
         actions = self.getLegalActions(state)
         for a in actions:
-            value = 0
-            skip = False
             if (state, a) in self.q.keys():
-                value = self.q[state, a]
-            if (state, bestAction) not in self.q.keys():
-                skip = True
-            if skip or (value) > self.q[state, bestAction]:
-                bestAction = a
+                if (state, bestAction) in self.q.keys():
+                    if self.q[state, a] > self.q[state, bestAction]:
+                        bestAction = a
+                else:
+                    bestAction = a
+        if (state, bestAction) not in self.q.keys():
+            return 0
         return self.q[state, bestAction]
     
     def updateQValues(self, old_state, actionDone, state, reward):
-        # print(self.q)
+        #print(self.q)
         if (old_state, actionDone) not in self.q.keys():
             self.q[old_state, actionDone] = 0
         old_reward = self.q[old_state, actionDone]
