@@ -124,20 +124,32 @@ class Environment:
         print(hash)
         return hash
 
-    def updateState(self, action):
+    def updateState(self, agent, action):
         # process action and return reward
         # illegal action -> -10
         # reach victim with space -> +5
         # drop victim to hospital -> +5 per victim
         # default (time) -> -1
         # TODO: add an action "wait[DIR]" which converts to DIR for the server but returns default reward if NOP
-        pass
+        status = self.doAction(agent.id, action)
+        
+        if status:
+            if action in [Action.LEFT, Action.RIGHT, Action.MOVE]:
+                return -1
+            if action == Action.DROP:
+                return 5  # times victim count
+            if action == Action.PICK:
+                return 5
+            if action == Action.NONE:
+                return -1
+        else:
+            return -10
 
     def runStep(self, agent):
         state = self.getState()
         agent.legalActions = self.getLegalActions(agent.id)
         action = agent.selectAction(state)
-        reward = self.updateState(action)
+        reward = self.updateState(agent, action)
         reward = 1  # to remove
         old_state = cp.deepcopy(state)
         state = self.getState()
@@ -172,17 +184,17 @@ class Environment:
 
     def doAction(self, agentId, action):
         if action == Action.LEFT:
-            self.doLeft(agentId)
+            status = self.doLeft(agentId)
         if action == Action.MOVE:
-            self.doMove(agentId)
+            status = self.doMove(agentId)
         if action == Action.RIGHT:
-            self.doRight(agentId)
+            status = self.doRight(agentId)
         if action == Action.PICK:
-            self.doPick(agentId)
+            status = self.doPick(agentId)
         if action == Action.DROP:
-            self.doDrop(agentId)
+            status = self.doDrop(agentId)
         if action == Action.NONE:
-            self.doNone(agentId)
+            status = self.doNone(agentId)
 
     def doLeft(self, agentId):
         agentCell = self._getCellAgent(agentId)
