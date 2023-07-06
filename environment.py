@@ -189,10 +189,10 @@ class Environment:
         self.saved = 0
         self.currentSaved = 4
 
-    def getState(self):
+    def getState(self, agent):
         # hash current state
         hashRaw = self.getStrNoColor()
-        agentCell = self._getCellAgent(0)
+        agentCell = self._getCellAgent(agent.id)
         hashRaw += str(len(agentCell.agentFlag.inventory))
         return hashRaw#hash(hashRaw)
 
@@ -218,14 +218,22 @@ class Environment:
                 reward = -1
         return reward
 
-    def runStep(self, agent, forceExplore=False):
-        state = self.getState()
+    def runStep(self, agent, forceExplore=False, idiotDuVillage=False):
+        state = self.getState(agent)
         agent.legalActions = self.getLegalActions(agent.id)
         action = agent.selectAction(state, forceExplore)
+        if idiotDuVillage:  # idiot -------------
+            agentCell = self._getCellAgent(agent.id)
+            if agentCell.victimFlag.index != -1:
+                if len(agentCell.agentFlag.inventory) < 2:
+                    action = Action.PICK
+            if agentCell.hospitalFlag.index != -1:
+                if len(agentCell.agentFlag.inventory) > 0:
+                    action = Action.DROP # ------
         reward = self.updateState(agent, action)
         agent.lastReward = reward
         old_state = cp.deepcopy(state)
-        state = self.getState()
+        state = self.getState(agent)
         agent.legalActions = self.getLegalActions(agent.id)
         final = self.currentSaved == 5
         agent.updateQValues(old_state, action, state, reward, final)
@@ -234,11 +242,14 @@ class Environment:
         agentCell = self._getCellAgent(agentId)
 
         legalActions = []
-        if agentCell.agentFlag.orientation.getLeft() in agentCell.openOrientations:
+        if agentCell.agentFlag.orientation.getLeft() in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation.getLeft()).agentFlag.index == -1:
             legalActions += [Action.LEFT]
-        if agentCell.agentFlag.orientation in agentCell.openOrientations:
+        if agentCell.agentFlag.orientation in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation).agentFlag.index == -1:
             legalActions += [Action.MOVE]
-        if agentCell.agentFlag.orientation.getRight() in agentCell.openOrientations:
+        if agentCell.agentFlag.orientation.getRight() in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation.getRight()).agentFlag.index == -1:
             legalActions += [Action.RIGHT]
         if agentCell.victimFlag.index != -1 and len(agentCell.agentFlag.inventory) < 2:
             legalActions += [Action.PICK]
@@ -342,11 +353,19 @@ class Environment:
         pass
 
     def _getCellAgent(self, agentId):
+        # print("vvvvvvvvvvvvvvvvvvvvvv")
         for x in range(self.w):
             for y in range(self.h):
+                # print(self.cellGrid[x][y].agentFlag.index, "---", agentId)
                 if self.cellGrid[x][y].agentFlag.index == agentId:
                     return self.cellGrid[x][y]
     
+    def simulateMove(self, cell, orientation):
+        if orientation not in cell.openOrientations:
+            return None
+        deltaX, deltaY = orientation.getOffset()
+        return self.cellGrid[cell.x + deltaX][cell.y + deltaY]
+
     def _moveOrientation(self, orientation, cell):
         if orientation not in cell.openOrientations:
             return False
@@ -381,10 +400,13 @@ class Environment:
         return result
     
 
+agent = RLAgent(0)
+walker = RLAgent(1)
+
 environment = Environment()
-environment.setCell(0, 0, agentIndex=0, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.DOWN, Orientation.RIGHT})
+environment.setCell(0, 0, openOrientations={Orientation.DOWN, Orientation.RIGHT})
 environment.setCell(1, 0, openOrientations={Orientation.LEFT, Orientation.RIGHT})
-environment.setCell(2, 0, openOrientations={Orientation.LEFT, Orientation.DOWN, Orientation.RIGHT})
+environment.setCell(2, 0, agentIndex=agent.id, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.LEFT, Orientation.DOWN, Orientation.RIGHT})
 environment.setCell(3, 0, openOrientations={Orientation.LEFT, Orientation.DOWN}, hospitalIndex=1)
 environment.setCell(4, 0, openOrientations={})
 
@@ -403,7 +425,7 @@ environment.setCell(4, 2, openOrientations={Orientation.LEFT, Orientation.DOWN})
 environment.setCell(0, 3, openOrientations={Orientation.UP, Orientation.DOWN})
 environment.setCell(1, 3, openOrientations={})
 environment.setCell(2, 3, openOrientations={Orientation.RIGHT, Orientation.DOWN})
-environment.setCell(3, 3, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN})
+environment.setCell(3, 3, agentIndex=walker.id, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN})
 environment.setCell(4, 3, openOrientations={Orientation.LEFT, Orientation.UP}, victimIndex=1)
 
 environment.setCell(0, 4, openOrientations={Orientation.UP, Orientation.RIGHT})
@@ -412,29 +434,17 @@ environment.setCell(2, 4, openOrientations={Orientation.LEFT, Orientation.RIGHT,
 environment.setCell(3, 4, openOrientations={Orientation.LEFT, Orientation.UP})
 environment.setCell(4, 4, openOrientations={})
 
-"""print(environment)
-print(environment.getLegalActions(0))
-environment.doAction(0, Action.MOVE)
-print(environment)
-print(environment.getLegalActions(0))
-environment.doAction(0, Action.MOVE)
-print(environment)
-print(environment.getLegalActions(0))
-environment.doAction(0, Action.MOVE)
-print(environment)
-print(environment.getLegalActions(0))"""
-
-agent = RLAgent()
 for step in range(1000000):
     # os.system('cls')
     forceExplore = False
     if step % 10000 == 0:
         print(step)
-    if step > 150000:
+    if step > 0*150000:
         forceExplore = False
         time.sleep(0.3)
         print("STEP:", step, "SAVED:", environment.saved, "VISITED:", str(len(agent.q)))
         print(environment)
-        print(round(agent.epsilon, 2), agent.lastReward, agent.lastAction, agent.getLegalActionRewards(environment.getState()))
+        print(round(agent.epsilon, 2), agent.lastReward, agent.lastAction, agent.getLegalActionRewards(environment.getState(agent)))
     environment.runStep(agent, forceExplore)
+    environment.runStep(walker, True, True)
 

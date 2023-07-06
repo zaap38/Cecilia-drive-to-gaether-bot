@@ -3,8 +3,8 @@ import copy as cp
 
 class RLAgent:
 
-    def __init__(self) -> None:
-        self.id = 0
+    def __init__(self, id) -> None:
+        self.id = id
         self.q = {}
         self.epsilon = 1.0  # exploration
         self.discountEpsilon = 0.99998
