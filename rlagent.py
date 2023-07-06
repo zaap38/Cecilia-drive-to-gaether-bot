@@ -7,10 +7,13 @@ class RLAgent:
         self.id = 0
         self.q = {}
         self.epsilon = 1.0  # exploration
-        self.discountEpsilon = 0.995
-        self.gamma = 0.1  # discount factor
-        self.eta = 0.05  # learning rate
+        self.discountEpsilon = 0.99998
+        self.gamma = 0.9997  # discount factor
+        self.eta = .1  # learning rate
         self.legalActions = []
+
+        self.lastReward = 0
+        self.lastAction = ""
 
     def getRandomPolicy(self, state):
         return rd.choice(self.getLegalActions(state))
@@ -20,14 +23,14 @@ class RLAgent:
         actions = self.getLegalActions(state)
         for a in actions:
             if (state, a) in self.q.keys():
-                couples.append((a, self.q[state, a]))
+                couples.append((a, round(self.q[state, a], 3)))
             else:
-                couples.append((a, 0))
+                couples.append((a, "?"))
         return str(couples)
     
     def getBestPolicy(self, state):
-        bestAction = 0
         actions = self.getLegalActions(state)
+        bestAction = actions[0]
         for a in actions:
             if (state, a) in self.q.keys():
                 if (state, bestAction) in self.q.keys():
@@ -48,27 +51,33 @@ class RLAgent:
                 else:
                     bestAction = a
         if (state, bestAction) not in self.q.keys():
-            return 0
+            return -1
         return self.q[state, bestAction]
     
-    def updateQValues(self, old_state, actionDone, state, reward):
+    def updateQValues(self, old_state, actionDone, state, reward, final=False):
         #print(self.q)
         if (old_state, actionDone) not in self.q.keys():
             self.q[old_state, actionDone] = 0
-        old_reward = self.q[old_state, actionDone]
-        self.q[old_state, actionDone] += self.eta * (reward + \
-                (self.getBestPolicyReward(state) - self.q[old_state, actionDone]) * self.gamma)
-        if abs(old_reward - self.q[old_state, actionDone]) <= 0.05:
+        #old_reward = self.q[old_state, actionDone]
+        if final:
+            self.q[old_state, actionDone] = reward
+            #print(old_state, actionDone)
+        else:
+            self.q[old_state, actionDone] = (1 - self.eta) * self.q[old_state, actionDone] + self.eta * (reward + \
+                    self.getBestPolicyReward(state) * self.gamma)
             self.epsilon = self.epsilon * self.discountEpsilon
 
     def getLegalActions(self, state):
         return self.legalActions
 
-    def selectAction(self, state):
-        if rd.random() < self.epsilon:  # explore
+    def selectAction(self, state, forceExplore=False):
+        prefix = ""
+        if forceExplore or rd.random() < self.epsilon:#max(self.epsilon, 0.05):  # explore
             action = self.getRandomPolicy(state)
+            prefix = "EXP-"
         else:  # best policy
             action = self.getBestPolicy(state)
+        self.lastAction = prefix + str(action)
         return action
 
 class TestEnv:

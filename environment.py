@@ -5,7 +5,10 @@ from rlagent import RLAgent
 import copy as cp
 import time
 import os
+from colorama import Fore, Back, Style
+import random as rd
 
+saved = 0
 
 class Action(IntEnum):
     MOVE = 0
@@ -73,7 +76,7 @@ class Cell:
         self.openOrientations = openOrientations
 
     def __str__(self):
-        result = ''  # Back.BLACK
+        # result = ''  # Back.BLACK
 
         # if self.typeNode == TypeNode.HOSPITAL:
         #     result = Back.BLUE
@@ -82,31 +85,39 @@ class Cell:
         # if self.typeNode == TypeNode.VICTIM:
         #     result = Back.RED
 
+        bg = Back.BLACK
+        fg = Fore.WHITE
+
+        if self.hospitalFlag.index > 0:
+            bg = Back.BLUE
+        if self.victimFlag.index > 0:
+            bg = Back.RED
+
         if self.openOrientations == {Orientation.UP, Orientation.DOWN}:
-            result += '┃'
+            result = '┃'
         elif self.openOrientations == {Orientation.LEFT, Orientation.RIGHT}:
-            result += '━'
+            result = '━'
 
         elif self.openOrientations == {Orientation.RIGHT, Orientation.DOWN}:
-            result += '┏'
+            result = '┏'
         elif self.openOrientations == {Orientation.LEFT, Orientation.DOWN}:
-            result += '┓'
+            result = '┓'
         elif self.openOrientations == {Orientation.UP, Orientation.RIGHT}:
-            result += '┗'
+            result = '┗'
         elif self.openOrientations == {Orientation.UP, Orientation.LEFT}:
-            result += '┛'
+            result = '┛'
 
         elif self.openOrientations == {Orientation.UP, Orientation.DOWN, Orientation.RIGHT}:
-            result += '┣'
+            result = '┣'
         elif self.openOrientations == {Orientation.UP, Orientation.DOWN, Orientation.LEFT}:
-            result += '┫'
+            result = '┫'
         elif self.openOrientations == {Orientation.RIGHT, Orientation.LEFT, Orientation.UP}:
-            result += '┻'
+            result = '┻'
         elif self.openOrientations == {Orientation.RIGHT, Orientation.LEFT, Orientation.DOWN}:
-            result += '┳'
+            result = '┳'
         
         else:
-            result += '•'
+            result = '•'
 
         if self.agentFlag.index != -1:
             #result = str(self.agentFlag.index)
@@ -118,6 +129,54 @@ class Cell:
                 result = '▼'
             elif self.agentFlag.orientation == Orientation.LEFT:
                 result = '◀'
+            if len(self.agentFlag.inventory) > 0:
+                fg = Fore.RED
+            
+        
+        return bg + fg + result + Back.BLACK
+    
+    def getStrNoColor(self):
+
+        if self.openOrientations == {Orientation.UP, Orientation.DOWN}:
+            result = '┃'
+        elif self.openOrientations == {Orientation.LEFT, Orientation.RIGHT}:
+            result = '━'
+
+        elif self.openOrientations == {Orientation.RIGHT, Orientation.DOWN}:
+            result = '┏'
+        elif self.openOrientations == {Orientation.LEFT, Orientation.DOWN}:
+            result = '┓'
+        elif self.openOrientations == {Orientation.UP, Orientation.RIGHT}:
+            result = '┗'
+        elif self.openOrientations == {Orientation.UP, Orientation.LEFT}:
+            result = '┛'
+
+        elif self.openOrientations == {Orientation.UP, Orientation.DOWN, Orientation.RIGHT}:
+            result = '┣'
+        elif self.openOrientations == {Orientation.UP, Orientation.DOWN, Orientation.LEFT}:
+            result = '┫'
+        elif self.openOrientations == {Orientation.RIGHT, Orientation.LEFT, Orientation.UP}:
+            result = '┻'
+        elif self.openOrientations == {Orientation.RIGHT, Orientation.LEFT, Orientation.DOWN}:
+            result = '┳'
+        
+        else:
+            result = '•'
+
+        if self.agentFlag.index != -1:
+            #result = str(self.agentFlag.index)
+            if self.agentFlag.orientation == Orientation.UP:
+                result = '▲'
+            elif self.agentFlag.orientation == Orientation.RIGHT:
+                result = '▶'
+            elif self.agentFlag.orientation == Orientation.DOWN:
+                result = '▼'
+            elif self.agentFlag.orientation == Orientation.LEFT:
+                result = '◀'
+
+        if self.victimFlag.index != -1:
+            result = 'V'
+            
         
         return result
 
@@ -127,11 +186,15 @@ class Environment:
         self.w = w
         self.h = h
         self.cellGrid = [[Cell(x, y) for y in range(h)] for x in range(w)]
+        self.saved = 0
+        self.currentSaved = 4
 
     def getState(self):
         # hash current state
-        hash = str(self)
-        return hash
+        hashRaw = self.getStrNoColor()
+        agentCell = self._getCellAgent(0)
+        hashRaw += str(len(agentCell.agentFlag.inventory))
+        return hashRaw#hash(hashRaw)
 
     def updateState(self, agent, action):
         # process action and return reward
@@ -145,24 +208,27 @@ class Environment:
         if status:
             if action in [Action.LEFT, Action.RIGHT, Action.MOVE]:
                 reward = -1
-                if action == Action.MOVE:  # test
-                    reward = 1
+                #if action == Action.MOVE:  # test
+                #    reward = 1
             if action == Action.DROP:
-                reward = 5  # times victim count
+                reward = 100  # times victim dropped count
             if action == Action.PICK:
-                reward = 5
+                reward = 50
             if action == Action.NONE:
                 reward = -1
         return reward
 
-    def runStep(self, agent):
+    def runStep(self, agent, forceExplore=False):
         state = self.getState()
         agent.legalActions = self.getLegalActions(agent.id)
-        action = agent.selectAction(state)
+        action = agent.selectAction(state, forceExplore)
         reward = self.updateState(agent, action)
+        agent.lastReward = reward
         old_state = cp.deepcopy(state)
         state = self.getState()
-        agent.updateQValues(old_state, action, state, reward)
+        agent.legalActions = self.getLegalActions(agent.id)
+        final = self.currentSaved == 5
+        agent.updateQValues(old_state, action, state, reward, final)
 
     def getLegalActions(self, agentId):
         agentCell = self._getCellAgent(agentId)
@@ -174,10 +240,16 @@ class Environment:
             legalActions += [Action.MOVE]
         if agentCell.agentFlag.orientation.getRight() in agentCell.openOrientations:
             legalActions += [Action.RIGHT]
+        if agentCell.victimFlag.index != -1 and len(agentCell.agentFlag.inventory) < 2:
+            legalActions += [Action.PICK]
+        if agentCell.hospitalFlag.index != -1 and len(agentCell.agentFlag.inventory) > 0:
+            legalActions += [Action.DROP]
 
         return legalActions
 
-    def setCell(self, x, y, agentIndex: int=-1, agentOrientation: Orientation=Orientation.UP, agentInventory: List[int]=[], hospitalIndex: int=-1, startIndex: int=-1, startOrientation: Orientation=Orientation.UP, victimIndex: int=-1, openOrientations: set[Orientation]={}):
+    def setCell(self, x, y, agentIndex: int=-1, agentOrientation: Orientation=Orientation.UP,
+                agentInventory: List[int]=[], hospitalIndex: int=-1, startIndex: int=-1,
+                startOrientation: Orientation=Orientation.UP, victimIndex: int=-1, openOrientations: set[Orientation]={}):
         self.cellGrid[x][y].agentFlag.index = agentIndex
         self.cellGrid[x][y].agentFlag.orientation = agentOrientation
         self.cellGrid[x][y].agentFlag.inventory = agentInventory
@@ -237,11 +309,34 @@ class Environment:
 
     def doDrop(self, agentId):
         agentCell = self._getCellAgent(agentId)
+        # test
+        #x = rd.randint(0, self.w - 1)
+        #y = rd.randint(0, self.h - 1)
+        self.saved += len(agentCell.agentFlag.inventory)
+        self.currentSaved += len(agentCell.agentFlag.inventory)
+        """while True:
+            x = rd.randint(0, self.w - 1)
+            y = rd.randint(0, self.h - 1)
+            x = 4
+            y = 3
+            if len(self.cellGrid[x][y].openOrientations) > 0:
+                self.cellGrid[x][y].victimFlag.index = rd.randint(0, 10)
+                return True"""
+        if self.currentSaved == 5:
+            self.currentSaved = 0
+            self.cellGrid[0][0].victimFlag.index = 1
+            self.cellGrid[1][0].victimFlag.index = 2
+            self.cellGrid[3][0].victimFlag.index = 3
+            self.cellGrid[2][1].victimFlag.index = 4
+            self.cellGrid[1][4].victimFlag.index = 5
+
 
         if len(agentCell.agentFlag.inventory) == 0:
             return False
         
         agentCell.agentFlag.inventory = []
+        return True
+        # return False
     
     def doNone(self, agentId):
         pass
@@ -277,12 +372,20 @@ class Environment:
             result += "\n"
         return result
     
+    def getStrNoColor(self):
+        result = ""
+        for y in range(self.h):
+            for x in range(self.w):
+                result += self.cellGrid[x][y].getStrNoColor()
+            result += "\n"
+        return result
+    
 
 environment = Environment()
 environment.setCell(0, 0, agentIndex=0, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.DOWN, Orientation.RIGHT})
 environment.setCell(1, 0, openOrientations={Orientation.LEFT, Orientation.RIGHT})
 environment.setCell(2, 0, openOrientations={Orientation.LEFT, Orientation.DOWN, Orientation.RIGHT})
-environment.setCell(3, 0, openOrientations={Orientation.LEFT, Orientation.DOWN})
+environment.setCell(3, 0, openOrientations={Orientation.LEFT, Orientation.DOWN}, hospitalIndex=1)
 environment.setCell(4, 0, openOrientations={})
 
 environment.setCell(0, 1, openOrientations={Orientation.DOWN, Orientation.UP})
@@ -301,7 +404,7 @@ environment.setCell(0, 3, openOrientations={Orientation.UP, Orientation.DOWN})
 environment.setCell(1, 3, openOrientations={})
 environment.setCell(2, 3, openOrientations={Orientation.RIGHT, Orientation.DOWN})
 environment.setCell(3, 3, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN})
-environment.setCell(4, 3, openOrientations={Orientation.LEFT, Orientation.UP})
+environment.setCell(4, 3, openOrientations={Orientation.LEFT, Orientation.UP}, victimIndex=1)
 
 environment.setCell(0, 4, openOrientations={Orientation.UP, Orientation.RIGHT})
 environment.setCell(1, 4, openOrientations={Orientation.LEFT, Orientation.RIGHT})
@@ -322,11 +425,16 @@ print(environment)
 print(environment.getLegalActions(0))"""
 
 agent = RLAgent()
-for _ in range(10000):
-    #os.system('cls')
-    print("vvvvvvvvvvvvvvvvvv")
-    print(environment)
-    print(agent.getLegalActionRewards(environment.getState()), agent.epsilon)
-    environment.runStep(agent)
-    time.sleep(0.3)
+for step in range(1000000):
+    # os.system('cls')
+    forceExplore = False
+    if step % 10000 == 0:
+        print(step)
+    if step > 150000:
+        forceExplore = False
+        time.sleep(0.3)
+        print("STEP:", step, "SAVED:", environment.saved, "VISITED:", str(len(agent.q)))
+        print(environment)
+        print(round(agent.epsilon, 2), agent.lastReward, agent.lastAction, agent.getLegalActionRewards(environment.getState()))
+    environment.runStep(agent, forceExplore)
 
