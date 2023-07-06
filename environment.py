@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import List, Tuple
 from enum import IntEnum
+from rlagent import RLAgent
+import copy as cp
 
 
 class Action(IntEnum):
@@ -115,6 +117,31 @@ class Environment:
         self.w = w
         self.h = h
         self.cellGrid = [[Cell(x, y) for y in range(h)] for x in range(w)]
+
+    def getState(self):
+        # hash current state
+        hash = str(self)
+        print(hash)
+        return hash
+
+    def updateState(self, action):
+        # process action and return reward
+        # illegal action -> -10
+        # reach victim with space -> +5
+        # drop victim to hospital -> +5 per victim
+        # default (time) -> -1
+        # TODO: add an action "wait[DIR]" which converts to DIR for the server but returns default reward if NOP
+        pass
+
+    def runStep(self, agent):
+        state = self.getState()
+        agent.legalActions = self.getLegalActions(agent.id)
+        action = agent.selectAction(state)
+        reward = self.updateState(action)
+        reward = 1  # to remove
+        old_state = cp.deepcopy(state)
+        state = self.getState()
+        agent.updateQValues(old_state, action, state, reward)
 
     def getLegalActions(self, agentId):
         agentCell = self._getCellAgent(agentId)
@@ -271,3 +298,7 @@ print(environment.getLegalActions(0))
 environment.doAction(0, Action.MOVE)
 print(environment)
 print(environment.getLegalActions(0))
+
+agent = RLAgent()
+environment.runStep(agent)
+
