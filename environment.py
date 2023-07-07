@@ -145,10 +145,20 @@ class Environment:
         self.h = h
         self.cellGrid = [[Cell(x, y) for y in range(h)] for x in range(w)]
         self.saved = 0
+        self.step = 0
 
-    def runStep(self, agent):
+    def runStep(self, agent, idiotDuVillage=False):
         state = repr(self)
-        action = agent.selectAction(state, self.getLegalActions(agent.id))
+        action = Action.NONE
+        if idiotDuVillage:
+            if Action.LEFT in self.getLegalActions(agent.id):
+                action = Action.LEFT
+            elif Action.MOVE in self.getLegalActions(agent.id):
+                action = Action.MOVE
+            elif Action.RIGHT in self.getLegalActions(agent.id):
+                action = Action.RIGHT
+        else:
+            action = agent.selectAction(state, self.getLegalActions(agent.id))
         reward = self.doAction(agent.id, action)
         
         old_state = cp.deepcopy(state)
@@ -156,17 +166,22 @@ class Environment:
         final = self.isFinal()
         agent.updateQValues(old_state, action, state, reward, final)
 
-        if final: self.reset()
+        if final or self.step == 150: self.reset()
+
+        self.step += 1
 
     def getLegalActions(self, agentId):
         agentCell = self._getCellAgent(agentId)
 
-        legalActions = []
-        if agentCell.agentFlag.orientation.getLeft() in agentCell.openOrientations:
+        legalActions = [Action.NONE]
+        if agentCell.agentFlag.orientation.getLeft() in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation.getLeft()).agentFlag.index == -1:
             legalActions += [Action.LEFT]
-        if agentCell.agentFlag.orientation in agentCell.openOrientations:
+        if agentCell.agentFlag.orientation in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation).agentFlag.index == -1:
             legalActions += [Action.MOVE]
-        if agentCell.agentFlag.orientation.getRight() in agentCell.openOrientations:
+        if agentCell.agentFlag.orientation.getRight() in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation.getRight()).agentFlag.index == -1:
             legalActions += [Action.RIGHT]
         if agentCell.victimFlag.index != -1 and len(agentCell.agentFlag.inventory) < 2:
             legalActions += [Action.PICK]
@@ -264,6 +279,7 @@ class Environment:
         return True
 
     def reset(self):
+        self.step = 0
         self.setCell(0, 0, agentIndex=0, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.DOWN, Orientation.RIGHT}, victimIndex=0)
         self.setCell(1, 0, openOrientations={Orientation.LEFT, Orientation.RIGHT})
         self.setCell(2, 0, openOrientations={Orientation.LEFT, Orientation.DOWN, Orientation.RIGHT})
@@ -285,7 +301,7 @@ class Environment:
         self.setCell(0, 3, openOrientations={Orientation.UP, Orientation.DOWN})
         self.setCell(1, 3, openOrientations={})
         self.setCell(2, 3, openOrientations={Orientation.RIGHT, Orientation.DOWN})
-        self.setCell(3, 3, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN})
+        self.setCell(3, 3, agentIndex=1, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN})
         self.setCell(4, 3, openOrientations={Orientation.LEFT, Orientation.UP})
 
         self.setCell(0, 4, openOrientations={Orientation.UP, Orientation.RIGHT})
@@ -295,11 +311,19 @@ class Environment:
         self.setCell(4, 4, openOrientations={})
 
     def _getCellAgent(self, agentId):
+        # print("vvvvvvvvvvvvvvvvvvvvvv")
         for x in range(self.w):
             for y in range(self.h):
+                # print(self.cellGrid[x][y].agentFlag.index, "---", agentId)
                 if self.cellGrid[x][y].agentFlag.index == agentId:
                     return self.cellGrid[x][y]
     
+    def simulateMove(self, cell, orientation):
+        if orientation not in cell.openOrientations:
+            return None
+        deltaX, deltaY = orientation.getOffset()
+        return self.cellGrid[cell.x + deltaX][cell.y + deltaY]
+
     def _moveOrientation(self, orientation, cell):
         if orientation not in cell.openOrientations:
             return False
@@ -338,6 +362,8 @@ class Environment:
 
 environment = Environment()
 environment.reset()
+agent = RLAgent(environment, 0)
+walker = RLAgent(environment, 1)
 
 agent = RLAgent(environment)
 for step in range(1000000):
@@ -351,3 +377,4 @@ for step in range(1000000):
         print(environment)
 
     environment.runStep(agent)
+    environment.runStep(walker, True)

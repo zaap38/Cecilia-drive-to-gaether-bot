@@ -2,8 +2,8 @@ import random as rd
 import copy as cp
 
 class RLAgent:
-    def __init__(self, environment):
-        self.id = 0
+    def __init__(self, environment, id=0):
+        self.id = id
         self.q = {}
         self.epsilon = 1.0  # exploration
         self.discountEpsilon = 0.99998
