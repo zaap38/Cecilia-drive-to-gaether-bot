@@ -6,7 +6,7 @@ class RLAgent:
         self.id = id
         self.q = {}
         self.epsilon = 1.0  # exploration
-        self.discountEpsilon = 0.99998
+        self.discountEpsilon = 0.999999
         self.gamma = 0.9997  # discount factor
         self.eta = .1  # learning rate
 

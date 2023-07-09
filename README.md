@@ -8,7 +8,7 @@
 
 
 
-Nous avons développé un simulateur pour tester notre algorithme d'apprentissage par renforcement. Afin de remplacer le deuxième robot, qui était initialement joué par un humain, nous avons introduit un robot qui effectue des actions aléatoires dans l'environnement.
+Nous avons développé un simulateur pour tester notre algorithme d'apprentissage par renforcement. Afin de remplacer le deuxième robot, qui était initialement joué par un humain, nous avons introduit un robot qui effectue des actions aléatoires dans l'environnement, il s'agit de l'agent du bas.
 
 Après un entraînement de 3 millions d'étapes, soit environ 15 minutes, notre agent est capable de se déplacer pour ramasser les victimes et les rapporter à l'hôpital. Nous avons constaté que notre agent prend parfois une ou deux victimes en fonction des configurations. De plus, nous avons observé que notre agent évite les situations où il pourrait être bloqué, par exemple en avançant face à l'autre agent dans une ligne droite (sachant qu'ils ne peuvent pas faire demi-tour).
 

@@ -152,7 +152,8 @@ class Environment:
         state = repr(self)
         action = Action.NONE
         if idiotDuVillage:
-            action = rd.choice([x for x in self.getLegalActions(agent.id) if x in [Action.LEFT, Action.MOVE, Action.RIGHT]] + [Action.NONE])
+            # action = rd.choice([x for x in self.getLegalActions(agent.id) if x in [Action.LEFT, Action.MOVE, Action.RIGHT]] + [Action.NONE])
+            action = rd.choice(self.getLegalActions(agent.id))
         else:
             action = agent.selectAction(state, self.getLegalActions(agent.id))
         reward = self.doAction(agent.id, action)
@@ -160,7 +161,8 @@ class Environment:
         old_state = cp.deepcopy(state)
         state = repr(self)
         final = self.isFinal()
-        agent.updateQValues(old_state, action, state, reward, final)
+        if not idiotDuVillage:
+            agent.updateQValues(old_state, action, state, reward, final)
 
         if final or self.step == 150: self.reset()
 
@@ -362,9 +364,9 @@ agent = RLAgent(environment, 0)
 walker = RLAgent(environment, 1)
 
 agent = RLAgent(environment)
-for step in range(1000000):
+for step in range(10_000_000):
 
-    if step <= 300000:
+    if step <= 3_000_000:
         if step % 10000 == 0:
             print(step)
     else:
