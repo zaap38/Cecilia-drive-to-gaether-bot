@@ -16,6 +16,12 @@ Ces résultats démontrent que notre algorithme d'apprentissage par renforcement
 
 
 
+https://github.com/zaap38/Cecilia-drive-to-gaether-bot/assets/92861593/5d3298ba-6674-4542-868b-40adf7a43d27
+
+Démo, notre agent est celui qui commence en haut.
+
+
+
 Ce projet contient deux classes principales : `RLAgent` et `Environment`, qui sont utilisées pour implémenter un agent d'apprentissage par renforcement (RL) dans un environnement de simulation.
 
 
