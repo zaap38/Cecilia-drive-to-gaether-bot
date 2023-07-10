@@ -1,43 +1,14 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-from colorama import Fore, Back, Style
-import time
-import random
+from __future__ import annotations
+from colorama import Fore, Back
 from enum import IntEnum
-from typing import Any
-import os
-import copy as cp
 import random as rd
+from typing import List
+import copy as cp
+import time
 
+from rlagent import RLAgent
 
-class TypeNode(IntEnum):
-    START = 0
-    HOSPITAL = 1
-    VICTIM = 2
-    NONE = 3
-
-
-
-class Edge(IntEnum):
-    UP = 0
-    RIGHT = 1
-    DOWN = 2
-    LEFT = 3
-
-    @staticmethod
-    def nextCoords(x, y, orientation):
-        if orientation == Edge.UP:
-            return x, y - 1
-        if orientation == Edge.RIGHT:
-            return x + 1, y
-        if orientation == Edge.DOWN:
-            return x, y + 1
-        if orientation == Edge.LEFT:
-            return x - 1, y
-
-Orientation = Edge
-
+saved = 0
 
 
 class Action(IntEnum):
@@ -48,267 +19,360 @@ class Action(IntEnum):
     DROP = 4
     NONE = 5
 
-    @staticmethod
-    def orientationFromAction(orientation, action):
-        if action in [Action.PICK, Action.DROP, Action.NONE]:
-            return None
-        
-        if action == Action.MOVE:
-            return orientation
 
-        if action == Action.LEFT:
-            return Orientation((int(orientation) - 1) % 4)
+class Orientation(IntEnum):
+    UP = 0
+    RIGHT = 1
+    DOWN = 2
+    LEFT = 3
 
-        if action == Action.RIGHT:
-            return Orientation((int(orientation) + 1) % 4)
+    def getOffset(self) -> tuple[int, int]:
+        if self == Orientation.UP:
+            return 0, -1
+        if self == Orientation.RIGHT:
+            return +1, 0
+        if self == Orientation.DOWN:
+            return 0, +1
+        if self == Orientation.LEFT:
+            return -1, 0
 
+    def getLeft(self) -> Orientation:
+        return Orientation((int(self) - 1)%4)
 
-
-class Node:
-    def __init__(self, typeNode, indexTypeNode, edgeOpen):
-        self.typeNode = typeNode
-        self.indexTypeNode = indexTypeNode
-        self.edgeOpen = set(edgeOpen)
-
-        self.pathLength = []
-    
-    def __str__(self):
-        result = Back.BLACK
-
-        if self.typeNode == TypeNode.HOSPITAL:
-            result = Back.BLUE
-        if self.typeNode == TypeNode.START:
-            result = Back.GREEN
-        if self.typeNode == TypeNode.VICTIM:
-            result = Back.RED
-
-        if self.edgeOpen == {Edge.UP, Edge.DOWN}:
-            result += '┃'
-        elif self.edgeOpen == {Edge.LEFT, Edge.RIGHT}:
-            result += '━'
-
-        elif self.edgeOpen == {Edge.RIGHT, Edge.DOWN}:
-            result += '┏'
-        elif self.edgeOpen == {Edge.LEFT, Edge.DOWN}:
-            result += '┓'
-        elif self.edgeOpen == {Edge.UP, Edge.RIGHT}:
-            result += '┗'
-        elif self.edgeOpen == {Edge.UP, Edge.LEFT}:
-            result += '┛'
-
-        elif self.edgeOpen == {Edge.UP, Edge.DOWN, Edge.RIGHT}:
-            result += '┣'
-        elif self.edgeOpen == {Edge.UP, Edge.DOWN, Edge.LEFT}:
-            result += '┫'
-        elif self.edgeOpen == {Edge.RIGHT, Edge.LEFT, Edge.UP}:
-            result += '┻'
-        elif self.edgeOpen == {Edge.RIGHT, Edge.LEFT, Edge.DOWN}:
-            result += '┳'
-        
-        else:
-            result += '•'
-        
-        return result
+    def getRight(self) -> Orientation:
+        return Orientation((int(self) + 1)%4)
 
 
+class AgentFlag:
+    def __init__(self, index: int=-1, orientation: Orientation=Orientation.UP, inventory: List[int]=[]):
+        self.index = index
+        self.orientation = orientation
+        self.inventory = inventory
 
-class Agent:
-    def __init__(self, x, y, orientation):
+
+class HospitalFlag:
+    def __init__(self, index: int=-1):
+        self.index = index
+
+
+class StartFlag:
+    def __init__(self, index: int=-1, orientation: Orientation=Orientation.UP):
+        self.index = index
+        self.orientation = orientation
+
+
+class VictimFlag:
+    def __init__(self, index: int=-1):
+        self.index = index
+
+
+class Cell:
+    def __init__(self, x, y, agentIndex: int=-1, agentOrientation: Orientation=Orientation.UP, agentInventory: List[int]=[], hospitalIndex: int=-1, startIndex: int=-1, startOrientation: Orientation=Orientation.UP, victimIndex: int=-1, openOrientations: set[Orientation]={}):
         self.x = x
         self.y = y
-        self.orientation = orientation
-    
-    def __str__(self):
-        result = Back.BLACK
+        self.agentFlag = AgentFlag(agentIndex, agentOrientation, agentInventory)
+        self.hospitalFlag = HospitalFlag(hospitalIndex)
+        self.startFlag = StartFlag(startIndex, startOrientation)
+        self.victimFlag = VictimFlag(victimIndex)
+        self.openOrientations = openOrientations
 
-        if self.orientation == Orientation.UP:
-            result += '▲'
-        elif self.orientation == Orientation.RIGHT:
-            result += '▶'
-        elif self.orientation == Orientation.DOWN:
-            result += '▼'
-        elif self.orientation == Orientation.LEFT:
-            result += '◀'
-    
-        else:
-            result += '•'
+    def __repr__(self):
+        result = '(' + str(self.x) + ', ' + str(self.y) + ', '
+
+        result += 'A' + str(self.agentFlag.index) + str(self.agentFlag.orientation) + ''.join(sorted([str(x) for x in self.agentFlag.inventory])) + ', '
+        result += 'H' + str(self.hospitalFlag.index) + ', '
+        result += 'V' + str(self.victimFlag.index) + ')'
 
         return result
 
-    def __call__(self):
-        return Action(random.randint(0, 2))
-    
+    def __str__(self):
+        background = Back.BLACK
+        foreground = Fore.WHITE
+
+        if self.hospitalFlag.index != -1:
+            background = Back.BLUE
+
+        if self.victimFlag.index != -1:
+            background = Back.RED
+        
+        if len(self.agentFlag.inventory) == 1:
+            foreground = Fore.LIGHTRED_EX
+                
+        if len(self.agentFlag.inventory) == 2:
+            foreground = Fore.RED
+
+        if self.openOrientations == {Orientation.UP, Orientation.DOWN}:
+            result = '┃'
+        elif self.openOrientations == {Orientation.LEFT, Orientation.RIGHT}:
+            result = '━'
+
+        elif self.openOrientations == {Orientation.RIGHT, Orientation.DOWN}:
+            result = '┏'
+        elif self.openOrientations == {Orientation.LEFT, Orientation.DOWN}:
+            result = '┓'
+        elif self.openOrientations == {Orientation.UP, Orientation.RIGHT}:
+            result = '┗'
+        elif self.openOrientations == {Orientation.UP, Orientation.LEFT}:
+            result = '┛'
+
+        elif self.openOrientations == {Orientation.UP, Orientation.DOWN, Orientation.RIGHT}:
+            result = '┣'
+        elif self.openOrientations == {Orientation.UP, Orientation.DOWN, Orientation.LEFT}:
+            result = '┫'
+        elif self.openOrientations == {Orientation.RIGHT, Orientation.LEFT, Orientation.UP}:
+            result = '┻'
+        elif self.openOrientations == {Orientation.RIGHT, Orientation.LEFT, Orientation.DOWN}:
+            result = '┳'
+        
+        else:
+            result = '•'
+
+        if self.agentFlag.index != -1:
+            if self.agentFlag.orientation == Orientation.UP:
+                result = '▲'
+            elif self.agentFlag.orientation == Orientation.RIGHT:
+                result = '▶'
+            elif self.agentFlag.orientation == Orientation.DOWN:
+                result = '▼'
+            elif self.agentFlag.orientation == Orientation.LEFT:
+                result = '◀'
+        
+        return background + foreground + result + Back.BLACK + Fore.WHITE
 
 
 class Environment:
-    def __init__(self, w, h):
+    def __init__(self, w: int=5, h: int=5):
         self.w = w
         self.h = h
-        self.nodeGrid = [[Node(TypeNode.NONE, -1, {}) for y in range(h)] for x in range(w)]
-        self.agentList = []
+        self.cellGrid = [[Cell(x, y) for y in range(h)] for x in range(w)]
+        self.saved = 0
+        self.step = 0
+
+    def runStep(self, agent, idiotDuVillage=False):
+        state = repr(self)
+        action = Action.NONE
+        if idiotDuVillage:
+            # action = rd.choice([x for x in self.getLegalActions(agent.id) if x in [Action.LEFT, Action.MOVE, Action.RIGHT]] + [Action.NONE])
+            action = rd.choice(self.getLegalActions(agent.id))
+        else:
+            action = agent.selectAction(state, self.getLegalActions(agent.id))
+        reward = self.doAction(agent.id, action)
+        
+        old_state = cp.deepcopy(state)
+        state = repr(self)
+        final = self.isFinal()
+        if not idiotDuVillage:
+            agent.updateQValues(old_state, action, state, reward, final)
+
+        if final or self.step == 150: self.reset()
+
+        self.step += 1
+
+    def getLegalActions(self, agentId):
+        agentCell = self._getCellAgent(agentId)
+
+        legalActions = [Action.NONE]
+        if agentCell.agentFlag.orientation.getLeft() in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation.getLeft()).agentFlag.index == -1:
+            legalActions += [Action.LEFT]
+        if agentCell.agentFlag.orientation in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation).agentFlag.index == -1:
+            legalActions += [Action.MOVE]
+        if agentCell.agentFlag.orientation.getRight() in agentCell.openOrientations and \
+                self.simulateMove(agentCell, agentCell.agentFlag.orientation.getRight()).agentFlag.index == -1:
+            legalActions += [Action.RIGHT]
+        if agentCell.victimFlag.index != -1 and len(agentCell.agentFlag.inventory) < 2:
+            legalActions += [Action.PICK]
+        if agentCell.hospitalFlag.index != -1 and len(agentCell.agentFlag.inventory) > 0:
+            legalActions += [Action.DROP]
+
+        return legalActions
+
+    def setCell(self, x, y, agentIndex: int=-1, agentOrientation: Orientation=Orientation.UP,
+                agentInventory=[], hospitalIndex: int=-1, startIndex: int=-1,
+                startOrientation: Orientation=Orientation.UP, victimIndex: int=-1, openOrientations: set[Orientation]={}):
+        self.cellGrid[x][y].agentFlag.index = agentIndex
+        self.cellGrid[x][y].agentFlag.orientation = agentOrientation
+        self.cellGrid[x][y].agentFlag.inventory = [] if len(agentInventory) == 0 else agentInventory
+
+        self.cellGrid[x][y].hospitalFlag.index = hospitalIndex
+
+        self.cellGrid[x][y].startFlag.index = startIndex
+        self.cellGrid[x][y].startFlag.orientation = startOrientation
+
+        self.cellGrid[x][y].victimFlag.index = victimIndex
+
+        self.cellGrid[x][y].openOrientations = {} if len(openOrientations) == 0 else openOrientations
+
+    def doAction(self, agentId, action):
+        if action == Action.LEFT:
+            status, reward = self.doLeft(agentId)
+        if action == Action.MOVE:
+            status, reward = self.doMove(agentId)
+        if action == Action.RIGHT:
+            status, reward = self.doRight(agentId)
+        if action == Action.PICK:
+            status, reward = self.doPick(agentId)
+        if action == Action.DROP:
+            status, reward = self.doDrop(agentId)
+        if action == Action.NONE:
+            status, reward = self.doNone(agentId)
+
+        if not status:
+            reward -= 10
+        reward -= 1
+
+        return reward
+
+    def doLeft(self, agentId):
+        agentCell = self._getCellAgent(agentId)
+
+        nextOrientation = agentCell.agentFlag.orientation.getLeft()
+        return self._moveOrientation(nextOrientation, agentCell), 0
+
+    def doMove(self, agentId):
+        agentCell = self._getCellAgent(agentId)
+
+        nextOrientation = agentCell.agentFlag.orientation
+        return self._moveOrientation(nextOrientation, agentCell), 0
+    
+    def doRight(self, agentId):
+        agentCell = self._getCellAgent(agentId)
+
+        nextOrientation = agentCell.agentFlag.orientation.getRight()
+        return self._moveOrientation(nextOrientation, agentCell), 0
+    
+    def doPick(self, agentId):
+        agentCell = self._getCellAgent(agentId)
+
+        if agentCell.victimFlag.index == -1:
+            return False, 0
+        
+        agentCell.agentFlag.inventory += [agentCell.victimFlag.index]
+        agentCell.victimFlag.index = -1
+
+        return True, 50
+
+    def doDrop(self, agentId):
+        agentCell = self._getCellAgent(agentId)
+        nbVictim = len(agentCell.agentFlag.inventory)
+
+        self.saved += nbVictim
+
+        if nbVictim == 0:
+            return False, 0
+        
+        agentCell.agentFlag.inventory = []
+        return True, nbVictim*100
+    
+    def doNone(self, agentId):
+        return True, 0
+    
+    def isFinal(self):
+        for x in range(self.w):
+            for y in range(self.h):
+                if self.cellGrid[x][y].victimFlag.index != -1 or len(self.cellGrid[x][y].agentFlag.inventory) != 0:
+                    return False
+
+        return True
+
+    def reset(self):
+        self.step = 0
+        self.setCell(0, 0, openOrientations={Orientation.DOWN, Orientation.RIGHT}, victimIndex=1)
+        self.setCell(1, 0, openOrientations={Orientation.LEFT, Orientation.RIGHT})#, victimIndex=2)
+        self.setCell(2, 0, agentIndex=0, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.LEFT, Orientation.DOWN, Orientation.RIGHT})
+        self.setCell(3, 0, openOrientations={Orientation.LEFT, Orientation.DOWN})#, victimIndex=3)
+        self.setCell(4, 0, openOrientations={})
+
+        self.setCell(0, 1, openOrientations={Orientation.DOWN, Orientation.UP})
+        self.setCell(1, 1, openOrientations={})
+        self.setCell(2, 1, openOrientations={Orientation.UP, Orientation.DOWN, Orientation.RIGHT})#, victimIndex=4)
+        self.setCell(3, 1, openOrientations={Orientation.UP, Orientation.DOWN, Orientation.LEFT}, hospitalIndex=1)
+        self.setCell(4, 1, openOrientations={})
+
+        self.setCell(0, 2, openOrientations={Orientation.UP, Orientation.DOWN, Orientation.RIGHT})
+        self.setCell(1, 2, openOrientations={Orientation.LEFT, Orientation.RIGHT})
+        self.setCell(2, 2, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.UP})
+        self.setCell(3, 2, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.UP})
+        self.setCell(4, 2, openOrientations={Orientation.LEFT, Orientation.DOWN})
+
+        self.setCell(0, 3, openOrientations={Orientation.UP, Orientation.DOWN})
+        self.setCell(1, 3, openOrientations={})
+        self.setCell(2, 3, openOrientations={Orientation.RIGHT, Orientation.DOWN})
+        self.setCell(3, 3, agentIndex=1, agentOrientation=Orientation.DOWN, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN})#, hospitalIndex=2)
+        self.setCell(4, 3, openOrientations={Orientation.LEFT, Orientation.UP})
+
+        self.setCell(0, 4, openOrientations={Orientation.UP, Orientation.RIGHT})
+        self.setCell(1, 4, openOrientations={Orientation.LEFT, Orientation.RIGHT}, victimIndex=5)
+        self.setCell(2, 4, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.UP})
+        self.setCell(3, 4, openOrientations={Orientation.LEFT, Orientation.UP})
+        self.setCell(4, 4, openOrientations={})
+
+    def _getCellAgent(self, agentId):
+        # print("vvvvvvvvvvvvvvvvvvvvvv")
+        for x in range(self.w):
+            for y in range(self.h):
+                # print(self.cellGrid[x][y].agentFlag.index, "---", agentId)
+                if self.cellGrid[x][y].agentFlag.index == agentId:
+                    return self.cellGrid[x][y]
+    
+    def simulateMove(self, cell, orientation):
+        if orientation not in cell.openOrientations:
+            return None
+        deltaX, deltaY = orientation.getOffset()
+        return self.cellGrid[cell.x + deltaX][cell.y + deltaY]
+
+    def _moveOrientation(self, orientation, cell):
+        if orientation not in cell.openOrientations:
+            return False
+
+        deltaX, deltaY = orientation.getOffset()
+        newCell = self.cellGrid[cell.x + deltaX][cell.y + deltaY]
+
+        newCell.agentFlag.index = cell.agentFlag.index
+        newCell.agentFlag.orientation = orientation
+        newCell.agentFlag.inventory = cell.agentFlag.inventory
+
+        cell.agentFlag.index = -1
+        cell.agentFlag.orientation = Orientation.UP
+        cell.agentFlag.inventory = []
+
+        return True
+
+    def __repr__(self):
+        result = ""
+        for y in range(self.h):
+            for x in range(self.w):
+                result += repr(self.cellGrid[x][y]) + '\n'
+        return result
 
     def __str__(self):
         result = ""
         for y in range(self.h):
             for x in range(self.w):
-                agent = self.agentAt(x, y)
-                result += str(agent) if agent else str(self.nodeGrid[x][y])
+                result += str(self.cellGrid[x][y])
             result += "\n"
         return result
     
-    def getPerception(self, agent):
-        return {}
-
-    def agentAt(self, x, y):
-        for a in self.agentList:
-            if a.x == x and a.y == y:
-                return a
-        return None
-
-    def getLinks(self, x, y):
-        links = []
-        for possibleOrientation in self.nodeGrid[x][y].edgeOpen:
-            links += [(Orientation.nextCoords(x, y, possibleOrientation))]
-        return links
-
-    def processAction(self, agent, agentAction):
-        actionOrientation = Action.orientationFromAction(agent.orientation, agentAction)
-        if actionOrientation in self.nodeGrid[agent.x][agent.y].edgeOpen:
-            agent.x, agent.y = Orientation.nextCoords(agent.x, agent.y, actionOrientation)
-            agent.orientation = actionOrientation
-            
-    def __call__(self):
-        for agent in self.agentList:
-            agentAction = agent()
-            self.processAction(agent, agentAction)
-    
-    def addAgent(self, x, y, o):
-        agent = Agent(x, y, o)
-        agent.id = len(self.agentList)
-        self.agentList += [agent]
-
-    def simulate(self, action):
-        pass
-
-    def getNeihbourStates(self):
-        actions = []
-        for agent in self.agentList:
-            actions.append(self.getPossibleMoves(agent))
-        states = []
-        for a in actions:
-            pass
-
-    def isInf(self, a, b, f):
-        return f(a) <= f(b)
-    
-    def distPathLength(self, a):
-        return a.pathLength
-
-    def getPriority(self, q):
-        index = None
-        for i, e in enumerate(q):
-            if index is None or self.isInf(e, q[index], self.distPathLength):
-                index = i
-        if index is None:
-            return None
-        e = q.pop(index)
-        return e
-
-    def processElement(self, e, queue, nodes, coordToIndex):
-        # update the color and add neighbours to queue
-        e.color = 2
-        neighbours = self.getLinks(e.coord[0], e.coord[1])
-        for n in neighbours:
-            if nodes[coordToIndex[n]].color == 0:
-                nodes[coordToIndex[n]].color = 1
-                nodes[coordToIndex[n]].pathLength = e.pathLength + 1
-                nodes[coordToIndex[n]].orientation = e.orientation
-                nodes[coordToIndex[n]].state = self.simulate()
-                queue.append(nodes[coordToIndex[n]])
-
-
-    def dijkstra(self):
-        # map each cel of the grid to the closest agent
-        current = None
-        queue = []
-        nodes = []
-        coordToIndex = dict()
-        index = 0
-        for y in range(self.h):
-            for x in range(self.w):
-                agent = self.agentAt(x, y)
-                node = PathNode(x, y)
-                if agent is not None:
-                    node.agent = agent
-                    node.color = 1
-                    queue.append(node)
-                nodes.append(node)
-                coordToIndex[node.coord] = index
-                index += 1
-
-
-        current = self.getPriority(queue)
-        while current is not None:
-            self.processElement(current, queue, nodes, coordToIndex)
-            current = self.getPriority(queue)
-
-        for y in range(self.h):  # update nodes pathLength
-            for x in range(self.w):
-                self.nodeGrid[x][y].pathLength = nodes[coordToIndex[(x, y)]].pathLength
 
 
 
-class PathNode:
 
-    def __init__(self, x, y, orientation=-1, color=0) -> None:
-        self.coord = (x, y)
-        self.orientation = orientation
-        self.color = color
-        self.pathLength = 0
-        self.state = None
+environment = Environment()
+environment.reset()
+agent = RLAgent(environment, 0)
+walker = RLAgent(environment, 1)
 
+agent = RLAgent(environment)
+for step in range(10_000_000):
 
+    if step <= 3_000_000:
+        if step % 10000 == 0:
+            print(step)
+    else:
+        time.sleep(0.3)
+        print("STEP:", step, "SAVED:", environment.saved, "VISITED:", str(len(agent.q)))
+        print(environment)
 
-environment = Environment(5, 5)
-environment.nodeGrid[0][0] = Node(TypeNode.VICTIM, 1, {Edge.DOWN, Edge.RIGHT})
-environment.nodeGrid[1][0] = Node(TypeNode.VICTIM, 2, {Edge.LEFT, Edge.RIGHT})
-environment.nodeGrid[2][0] = Node(TypeNode.START, 1, {Edge.LEFT, Edge.DOWN, Edge.RIGHT})
-environment.nodeGrid[3][0] = Node(TypeNode.VICTIM, 3, {Edge.LEFT, Edge.DOWN})
-environment.nodeGrid[4][0] = Node(TypeNode.NONE, 0, {})
-
-environment.nodeGrid[0][1] = Node(TypeNode.NONE, 0, {Edge.DOWN, Edge.UP})
-environment.nodeGrid[1][1] = Node(TypeNode.NONE, 0, {})
-environment.nodeGrid[2][1] = Node(TypeNode.VICTIM, 4, {Edge.UP, Edge.DOWN, Edge.RIGHT})
-environment.nodeGrid[3][1] = Node(TypeNode.HOSPITAL, 1, {Edge.UP, Edge.DOWN, Edge.LEFT})
-environment.nodeGrid[4][1] = Node(TypeNode.NONE, 0, {})
-
-environment.nodeGrid[0][2] = Node(TypeNode.NONE, 0, {Edge.UP, Edge.DOWN, Edge.RIGHT})
-environment.nodeGrid[1][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT})
-environment.nodeGrid[2][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT, Edge.UP})
-environment.nodeGrid[3][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT, Edge.UP})
-environment.nodeGrid[4][2] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.DOWN})
-
-environment.nodeGrid[0][3] = Node(TypeNode.NONE, 0, {Edge.UP, Edge.DOWN})
-environment.nodeGrid[1][3] = Node(TypeNode.NONE, 0, {})
-environment.nodeGrid[2][3] = Node(TypeNode.HOSPITAL, 2, {Edge.RIGHT, Edge.DOWN})
-environment.nodeGrid[3][3] = Node(TypeNode.START, 2, {Edge.LEFT, Edge.RIGHT, Edge.DOWN})
-environment.nodeGrid[4][3] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.UP})
-
-environment.nodeGrid[0][4] = Node(TypeNode.START, 3, {Edge.UP, Edge.RIGHT})
-environment.nodeGrid[1][4] = Node(TypeNode.VICTIM, 5, {Edge.LEFT, Edge.RIGHT})
-environment.nodeGrid[2][4] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.RIGHT, Edge.UP})
-environment.nodeGrid[3][4] = Node(TypeNode.NONE, 0, {Edge.LEFT, Edge.UP})
-environment.nodeGrid[4][4] = Node(TypeNode.NONE, 0, {})
-
-environment.addAgent(0, 1, Orientation.DOWN)
-environment.addAgent(1, 2, Orientation.DOWN)
-
-print(environment)
-# env = TestEnv()
-for _ in range(300):
-    #environment()
-    # environment.voronoi()
-    # os.system('clear')
-    #print(environment)
-    # env.runStep()
-    time.sleep(0.1)
+    environment.runStep(agent)
+    environment.runStep(walker, True)
