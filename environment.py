@@ -152,7 +152,15 @@ class Environment:
         state = repr(self)
         action = Action.NONE
         if idiotDuVillage:
-            action = rd.choice([x for x in self.getLegalActions(agent.id) if x in [Action.LEFT, Action.MOVE, Action.RIGHT]] + [Action.NONE])
+            agentCell = self._getCellAgent(agent.id)
+            #action = rd.choice([x for x in self.getLegalActions(agent.id) if x in [Action.LEFT, Action.MOVE, Action.RIGHT]] + [Action.NONE])
+            action = rd.choice(self.getLegalActions(agent.id))
+            if agentCell.victimFlag.index != -1:
+                if len(agentCell.agentFlag.inventory) < 2:
+                    action = Action.PICK
+            elif agentCell.hospitalFlag.index != -1:
+                if len(agentCell.agentFlag.inventory) > 0:
+                    action = Action.DROP
         else:
             action = agent.selectAction(state, self.getLegalActions(agent.id))
         reward = self.doAction(agent.id, action)
@@ -217,7 +225,7 @@ class Environment:
             status, reward = self.doNone(agentId)
 
         if not status:
-            reward -= 10
+            reward -= 10*0
         reward -= 1
 
         return reward
@@ -277,14 +285,14 @@ class Environment:
     def reset(self):
         self.step = 0
         self.setCell(0, 0, openOrientations={Orientation.DOWN, Orientation.RIGHT}, victimIndex=1)
-        self.setCell(1, 0, openOrientations={Orientation.LEFT, Orientation.RIGHT})#, victimIndex=2)
+        self.setCell(1, 0, openOrientations={Orientation.LEFT, Orientation.RIGHT}, victimIndex=2)
         self.setCell(2, 0, agentIndex=0, agentOrientation=Orientation.RIGHT, openOrientations={Orientation.LEFT, Orientation.DOWN, Orientation.RIGHT})
-        self.setCell(3, 0, openOrientations={Orientation.LEFT, Orientation.DOWN})#, victimIndex=3)
+        self.setCell(3, 0, openOrientations={Orientation.LEFT, Orientation.DOWN}, victimIndex=3)
         self.setCell(4, 0, openOrientations={})
 
         self.setCell(0, 1, openOrientations={Orientation.DOWN, Orientation.UP})
         self.setCell(1, 1, openOrientations={})
-        self.setCell(2, 1, openOrientations={Orientation.UP, Orientation.DOWN, Orientation.RIGHT})#, victimIndex=4)
+        self.setCell(2, 1, openOrientations={Orientation.UP, Orientation.DOWN, Orientation.RIGHT}, victimIndex=4)
         self.setCell(3, 1, openOrientations={Orientation.UP, Orientation.DOWN, Orientation.LEFT}, hospitalIndex=1)
         self.setCell(4, 1, openOrientations={})
 
@@ -297,7 +305,7 @@ class Environment:
         self.setCell(0, 3, openOrientations={Orientation.UP, Orientation.DOWN})
         self.setCell(1, 3, openOrientations={})
         self.setCell(2, 3, openOrientations={Orientation.RIGHT, Orientation.DOWN})
-        self.setCell(3, 3, agentIndex=1, agentOrientation=Orientation.DOWN, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN})#, hospitalIndex=2)
+        self.setCell(3, 3, agentIndex=1, agentOrientation=Orientation.DOWN, openOrientations={Orientation.LEFT, Orientation.RIGHT, Orientation.DOWN}, hospitalIndex=2)
         self.setCell(4, 3, openOrientations={Orientation.LEFT, Orientation.UP})
 
         self.setCell(0, 4, openOrientations={Orientation.UP, Orientation.RIGHT})
@@ -362,9 +370,9 @@ agent = RLAgent(environment, 0)
 walker = RLAgent(environment, 1)
 
 agent = RLAgent(environment)
-for step in range(1000000):
+for step in range(10000000):
 
-    if step <= 300000:
+    if step <= 6000000:
         if step % 10000 == 0:
             print(step)
     else:
